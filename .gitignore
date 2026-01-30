@@ -1,0 +1,6 @@
+.env
+node_modules
+beacon-ai-ui/node_modules
+dist
+beacon-ai-ui/dist
+
