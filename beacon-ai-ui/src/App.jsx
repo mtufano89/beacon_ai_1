@@ -7,13 +7,22 @@ export default function App() {
   const SUPPORT_EMAIL = "support@shorelinedevco.com";
   const BOOK_CALL_URL = "https://shorelinedevco.com/contact";
 
+  // Pricing (locked)
+  const PACKAGE_PRICES = {
+    "Starter Website": 299,
+    "Business Website": 499,
+    "Premium Website": 899
+  };
+
+  const DISCOUNT_RATE = 0.15;
+
   // Form state (simple)
   const [website, setWebsite] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
 
-  // App stateF
+  // App state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -30,6 +39,18 @@ export default function App() {
 
   function isValidEmail(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((value || "").trim());
+  }
+
+  function formatMoney(amount) {
+    const n = Number(amount);
+    if (!Number.isFinite(n)) return "";
+    return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+  }
+
+  function discountedPrice(price) {
+    const p = Number(price);
+    if (!Number.isFinite(p)) return null;
+    return Math.round(p * (1 - DISCOUNT_RATE));
   }
 
   function buildIssues(report) {
@@ -86,34 +107,56 @@ export default function App() {
   function recommendPackage(bn, score, issues) {
     const has = (k) => issues.some((i) => i.key === k);
 
+    // If basics look solid, push Premium (polish + SEO depth)
     if (issues.length === 0 && score >= 95) {
       return {
-        name: "Growth + Performance Tune Up",
-        reason: `Your site for ${bn} looks strong on the basics. Next wins usually come from speed, conversion clarity, and advanced SEO.`,
-        bullets: ["Speed and performance improvements", "Conversion focused CTA and layout tweaks", "Advanced SEO and tracking setup"]
+        name: "Premium Website",
+        reason: `Your site for ${bn} is in a strong spot. The biggest wins now are deeper SEO polish, conversion cleanup, and a more premium build experience.`,
+        bullets: ["7+ custom-structured pages", "GA4 tracking setup", "Meta tags and Open Graph setup", "Favicon included", "DNS support plus 7-day check-in"]
       };
     }
 
+    // On-page SEO fundamentals missing -> Business or Premium
     if (has("title_missing") || has("meta_missing")) {
+      // If the score is lower, recommend Business first
+      if (score < 70) {
+        return {
+          name: "Business Website",
+          reason: `Your site for ${bn} is missing key SEO basics (titles and meta descriptions). The Business Website package gets those fundamentals fixed and sets you up to convert.`,
+          bullets: ["4–6 total pages (Services, FAQ, Gallery, etc.)", "GA4 tracking setup", "Open Graph setup", "DNS launch support"]
+        };
+      }
+
+      // Otherwise recommend Premium for deeper polish
       return {
-        name: "SEO Starter Fix Pack",
-        reason: "Your site is missing key on page SEO fundamentals that help search engines understand and rank your pages.",
-        bullets: ["Write or improve titles and meta descriptions", "Heading structure cleanup (H1, H2, H3)", "Basic technical SEO checks"]
+        name: "Premium Website",
+        reason: `Your site for ${bn} needs SEO fundamentals fixed, and Premium is the best fit if you want a more complete build with stronger polish and deeper SEO setup.`,
+        bullets: ["7+ custom-structured pages", "GA4 tracking setup", "Meta tags and Open Graph setup", "Favicon included", "DNS support plus 7-day check-in"]
       };
     }
 
+    // Heading structure issues -> Business by default
     if (has("h1_missing") || has("h1_multiple") || has("h1_unknown")) {
       return {
-        name: "Content + Structure Cleanup",
-        reason: "Your heading structure needs cleanup so visitors and search engines can understand the page quickly.",
-        bullets: ["Add a clear main headline (single H1)", "Improve section headings (H2, H3)", "Tighten layout for clarity"]
+        name: "Business Website",
+        reason: `Your site’s page structure needs cleanup so visitors and search engines understand the page quickly. The Business Website package handles that cleanup and gives you the right foundation.`,
+        bullets: ["4–6 total pages (Services, FAQ, Gallery, etc.)", "GA4 tracking setup", "Open Graph setup", "DNS launch support"]
+      };
+    }
+
+    // Catch-all: pick based on score
+    if (score >= 80) {
+      return {
+        name: "Business Website",
+        reason: `Your site for ${bn} is close. Business Website is the best next step to tighten structure, tracking, and launch support.`,
+        bullets: ["4–6 total pages (Services, FAQ, Gallery, etc.)", "GA4 tracking setup", "Open Graph setup", "DNS launch support"]
       };
     }
 
     return {
-      name: "Website Improvement Audit",
-      reason: "We found opportunities to improve performance, SEO, and conversion clarity. A short audit will tell us the best next move.",
-      bullets: ["Quick technical review", "Top 5 highest impact fixes", "Recommended plan and package"]
+      name: "Starter Website",
+      reason: `Your site for ${bn} needs a clean foundation. The Starter Website package gets you a professional baseline fast, then we can layer in upgrades when you’re ready.`,
+      bullets: ["3 pages: Home, About, Contact", "Mobile-friendly design", "DNS connection and launch setup"]
     };
   }
 
@@ -134,7 +177,7 @@ export default function App() {
     if (!issues.length) lines.push("No major issues found from basic checks.");
     else for (const i of issues) lines.push(`- ${i.label} (${i.severity})`);
     lines.push("");
-    lines.push("Recommended next step:");
+    lines.push("Recommended package:");
     lines.push(recommendation?.name || "Not available");
     if (recommendation?.reason) lines.push(recommendation.reason);
     if (recommendation?.bullets?.length) {
@@ -170,11 +213,7 @@ export default function App() {
       setResult(data.report ?? data);
     } catch (err) {
       console.error(err);
-      setError(
-        err?.error ||
-          err?.message ||
-          "Analysis failed. Please check your inputs and try again."
-      );
+      setError(err?.error || err?.message || "Analysis failed. Please check your inputs and try again.");
     } finally {
       setLoading(false);
     }
@@ -191,6 +230,21 @@ export default function App() {
 
   const scoreInfo = computedScore === null ? null : scoreLabel(computedScore);
   const scoreTone = scoreInfo ? toneStyles(scoreInfo.tone) : null;
+
+  // Pricing derived from recommendation
+  const pricing = useMemo(() => {
+    if (!recommendation?.name) return null;
+    const base = PACKAGE_PRICES[recommendation.name];
+    if (!base) return null;
+    const sale = discountedPrice(base);
+    const savings = sale === null ? null : base - sale;
+
+    // 48-hour window (based on analyzed time if available)
+    const analyzedAt = result?.updated_at ? new Date(result.updated_at) : new Date();
+    const expiresAt = new Date(analyzedAt.getTime() + 48 * 60 * 60 * 1000);
+
+    return { base, sale, savings, analyzedAt, expiresAt };
+  }, [recommendation, result]);
 
   function handleBookCall() {
     window.open(BOOK_CALL_URL, "_blank", "noopener,noreferrer");
@@ -340,46 +394,46 @@ export default function App() {
     },
 
     brandRow: {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  margin: "0 0 18px",
-  padding: 0
-},
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      margin: "0 0 18px",
+      padding: 0
+    },
 
-logoWrap: {
-  position: "relative",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "8px",
-  borderRadius: 999
-},
+    logoWrap: {
+      position: "relative",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "8px",
+      borderRadius: 999
+    },
 
-logoGlow: {
-  position: "absolute",
-  inset: "-28px",
-  borderRadius: 999,
-  background:
-    "radial-gradient(circle at 50% 50%, rgba(92,200,255,0.35) 0%, rgba(43,123,255,0.18) 35%, rgba(0,0,0,0) 70%)",
-  filter: "blur(18px)",
-  opacity: 0.1,
-  pointerEvents: "none"
-},
+    logoGlow: {
+      position: "absolute",
+      inset: "-28px",
+      borderRadius: 999,
+      background:
+        "radial-gradient(circle at 50% 50%, rgba(92,200,255,0.35) 0%, rgba(43,123,255,0.18) 35%, rgba(0,0,0,0) 70%)",
+      filter: "blur(18px)",
+      opacity: 0.1,
+      pointerEvents: "none"
+    },
 
-logoImg: {
-  position: "relative",
-  height: 170,
-  width: "auto",
-  display: "block",
-  objectFit: "contain",
-  borderRadius: 24,
-  background: "transparent",
-  border: "none",
-  padding: 0,
-  boxShadow: "0 28px 90px rgba(0,0,0,0.65)",
-  filter: "drop-shadow(0 0 26px rgba(92,200,255,0.35))"
-},
+    logoImg: {
+      position: "relative",
+      height: 170,
+      width: "auto",
+      display: "block",
+      objectFit: "contain",
+      borderRadius: 24,
+      background: "transparent",
+      border: "none",
+      padding: 0,
+      boxShadow: "0 28px 90px rgba(0,0,0,0.65)",
+      filter: "drop-shadow(0 0 26px rgba(92,200,255,0.35))"
+    },
 
     card: {
       borderRadius: 22,
@@ -389,12 +443,14 @@ logoImg: {
       boxShadow: "0 26px 80px rgba(0,0,0,0.55)",
       backdropFilter: "blur(10px)"
     },
+
     cardInner: {
       borderRadius: 18,
       padding: 18,
       background: "rgba(255,255,255,0.04)",
       border: "1px solid rgba(255,255,255,0.10)"
     },
+
     title: {
       margin: 0,
       textAlign: "center",
@@ -402,6 +458,7 @@ logoImg: {
       fontWeight: 950,
       letterSpacing: -0.3
     },
+
     subtitle: {
       margin: "10px 0 18px",
       textAlign: "center",
@@ -421,7 +478,17 @@ logoImg: {
       padding: "12px 12px"
     },
 
-   
+    iconBox: {
+      width: 34,
+      height: 34,
+      borderRadius: 12,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "rgba(255,255,255,0.08)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      color: "rgba(229,231,235,0.95)"
+    },
 
     input: {
       width: "100%",
@@ -510,7 +577,46 @@ logoImg: {
       borderRadius: 14,
       border: "1px solid rgba(255,255,255,0.10)",
       background: "rgba(255,255,255,0.04)"
-    }
+    },
+
+    priceRow: {
+      marginTop: 12,
+      padding: 14,
+      borderRadius: 16,
+      border: "1px solid rgba(92,200,255,0.22)",
+      background: "rgba(92,200,255,0.06)"
+    },
+
+    strike: {
+      textDecoration: "line-through",
+      color: "rgba(229,231,235,0.65)",
+      fontWeight: 800
+    },
+
+    salePrice: {
+      fontSize: 26,
+      fontWeight: 950,
+      color: "#eaf6ff",
+      letterSpacing: -0.2
+    },
+
+    savePill: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "6px 10px",
+      borderRadius: 999,
+      border: "1px solid rgba(34,197,94,0.35)",
+      background: "rgba(34,197,94,0.12)",
+      color: "#a7f3d0",
+      fontSize: 12,
+      fontWeight: 950,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+      whiteSpace: "nowrap"
+    },
+
+    finePrint: { marginTop: 8, fontSize: 12, color: "rgba(229,231,235,0.72)", lineHeight: 1.5 }
   };
 
   return (
@@ -520,14 +626,13 @@ logoImg: {
         <div style={styles.circuits} />
 
         <div style={styles.content}>
-          {/* Logo (changed wrapper from h1 to div) */}
+          {/* Logo */}
           <div style={styles.brandRow}>
-  <div style={styles.logoWrap}>
-    <div style={styles.logoGlow} />
-    <img src={beaconLogo} alt="Beacon AI" style={styles.logoImg} />
-  </div>
-</div>
-
+            <div style={styles.logoWrap}>
+              <div style={styles.logoGlow} />
+              <img src={beaconLogo} alt="Beacon AI" style={styles.logoImg} />
+            </div>
+          </div>
 
           <div style={styles.cardWrap}>
             <div style={styles.card}>
@@ -550,8 +655,7 @@ logoImg: {
                     />
                   </div>
                   <div style={styles.help}>
-                    We will analyze:{" "}
-                    <span style={{ color: "#fff" }}>{normalizedWebsiteForDisplay || "Enter a site above"}</span>
+                    We will analyze: <span style={{ color: "#fff" }}>{normalizedWebsiteForDisplay || "Enter a site above"}</span>
                   </div>
                 </div>
 
@@ -573,12 +677,7 @@ logoImg: {
                 <div style={styles.field}>
                   <div style={styles.inputWrap}>
                     <UserIcon />
-                    <input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Your name (optional)"
-                      style={styles.input}
-                    />
+                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (optional)" style={styles.input} />
                   </div>
                 </div>
 
@@ -730,11 +829,45 @@ logoImg: {
 
               {recommendation && (
                 <div style={styles.panel}>
-                  <h3 style={styles.sectionTitle}>Recommended Next Step</h3>
+                  <h3 style={styles.sectionTitle}>Recommended Package</h3>
+
                   <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950 }}>{recommendation.name}</div>
-                  <div style={{ marginTop: 10, color: "rgba(229,231,235,0.90)", lineHeight: 1.6 }}>
-                    {recommendation.reason}
-                  </div>
+
+                  {pricing && (
+                    <div style={styles.priceRow}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+                        <div>
+                          <div style={{ fontSize: 12, color: "rgba(229,231,235,0.75)", fontWeight: 800 }}>Regular price</div>
+                          <div style={styles.strike}>{formatMoney(pricing.base)}</div>
+                        </div>
+
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 12, color: "rgba(229,231,235,0.75)", fontWeight: 800 }}>Beacon AI price (15% off)</div>
+                          <div style={styles.salePrice}>{formatMoney(pricing.sale)}</div>
+                        </div>
+                      </div>
+
+                      {pricing.savings !== null && (
+                        <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <span style={styles.savePill}>Save {formatMoney(pricing.savings)}</span>
+                          <span style={{ fontSize: 12, color: "rgba(229,231,235,0.75)" }}>
+                            Book within 48 hours to lock this in
+                          </span>
+                        </div>
+                      )}
+
+                      {pricing.expiresAt && (
+                        <div style={styles.finePrint}>
+                          Discount expires:{" "}
+                          <span style={{ color: "rgba(255,255,255,0.92)", fontWeight: 800 }}>
+                            {pricing.expiresAt.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 10, color: "rgba(229,231,235,0.90)", lineHeight: 1.6 }}>{recommendation.reason}</div>
 
                   <ul style={{ marginTop: 12, marginBottom: 0, paddingLeft: 18 }}>
                     {recommendation.bullets.map((b) => (
@@ -754,9 +887,7 @@ logoImg: {
                     </button>
                   </div>
 
-                  <div style={{ marginTop: 10, fontSize: 12, color: "rgba(229,231,235,0.70)" }}>
-                    Email sends to: {SUPPORT_EMAIL}
-                  </div>
+                  <div style={{ marginTop: 10, fontSize: 12, color: "rgba(229,231,235,0.70)" }}>Email sends to: {SUPPORT_EMAIL}</div>
                 </div>
               )}
             </div>
